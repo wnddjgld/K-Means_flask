@@ -52,8 +52,6 @@ def analyze():
         k = int(request.form.get('k', 3))
         x_axis = request.form.get('x_axis')
         y_axis = request.form.get('y_axis')
-        use_pca = request.form.get('use_pca') == 'true'
-        normalize = request.form.get('normalize') == 'true'
 
         # 2. 데이터 준비
         df = read_csv_file(file)
@@ -64,74 +62,81 @@ def analyze():
 
         X = numeric_df.values
         
-        # 3. 데이터 변환 (계산용 및 시각화용)
-        # ----------------------------------------------------
+        # 3. 정규화 (항상 적용)
         scaler = StandardScaler()
-        
-        # (1) 정규화 적용 여부
-        if normalize:
-            # 정규화 체크 시: 데이터 전체를 변환 (평균=0, 분산=1)
-            X_transformed = scaler.fit_transform(X)
-            
-            # 시각화할 데이터도 변환된 값에서 가져옴
-            x_col_idx = numeric_df.columns.get_loc(x_axis)
-            y_col_idx = numeric_df.columns.get_loc(y_axis)
-            
-            x_data = X_transformed[:, x_col_idx]
-            y_data = X_transformed[:, y_col_idx]
-            
-            axis_suffix = " (Standardized)"
-        else:
-            # 정규화 미체크 시: 원본 데이터 사용
-            X_transformed = X
-            x_data = numeric_df[x_axis]
-            y_data = numeric_df[y_axis]
-            axis_suffix = " (Original)"
+        X_normalized = scaler.fit_transform(X)
 
-        # (2) PCA 적용 여부 (군집화 계산에만 영향, 시각화 축은 사용자가 선택한 X,Y 유지)
-        if use_pca:
-            # PCA는 이미 정규화된(혹은 원본) X_transformed를 입력으로 받음
-            pca_calc = PCA(n_components=2)
-            X_calc = pca_calc.fit_transform(X_transformed)
-        else:
-            X_calc = X_transformed
-
-        # 4. K-means 수행
+        # 4. K-means 수행 (정규화된 데이터로)
         kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-        labels = kmeans.fit_predict(X_calc)
+        labels = kmeans.fit_predict(X_normalized)
         
-        # 5. 시각화
-        plt.figure(figsize=(10, 8))
+        # 5. 시각화 준비
+        # 원본 데이터의 X, Y 추출
+        x_data_original = numeric_df[x_axis].values
+        y_data_original = numeric_df[y_axis].values
         
-        scatter = plt.scatter(x_data, y_data, c=labels, cmap='viridis', 
-                              alpha=0.7, edgecolors='w', s=60)
+        # PCA 변환
+        pca = PCA(n_components=2)
+        X_pca = pca.fit_transform(X_normalized)
         
-        # 중심점 표시 로직
-        if normalize:
-            # 정규화된 상태면, 중심점도 정규화된 좌표계(kmeans.cluster_centers_)에서 가져와야 함
-            # 단, PCA까지 썼다면 역변환이 복잡하므로, 가장 확실한 방법인 '그룹별 평균'을 사용
-            temp_df = pd.DataFrame({ 'x': x_data, 'y': y_data, 'label': labels })
-            centers = temp_df.groupby('label').mean().values
-        else:
-            # 원본이면 원본 데이터의 그룹별 평균
-            temp_df = pd.DataFrame({ 'x': x_data, 'y': y_data, 'label': labels })
-            centers = temp_df.groupby('label').mean().values
-
-        plt.scatter(centers[:, 0], centers[:, 1], 
+        # 6. 그래프 1: 원본 X, Y로 산점도
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+        
+        # 색상 매핑 (viridis 컬러맵)
+        from matplotlib.cm import viridis
+        colors = viridis(np.linspace(0, 1, k))
+        
+        # 그래프 1 - 각 군집별로 색상을 지정하여 범례에 표시
+        for cluster_id in range(k):
+            mask = labels == cluster_id
+            ax1.scatter(x_data_original[mask], y_data_original[mask], 
+                       c=[colors[cluster_id]], alpha=0.7, edgecolors='w', s=60,
+                       label=f'Cluster {cluster_id}')
+        
+        # 원본 데이터의 군집별 중심점
+        temp_df1 = pd.DataFrame({'x': x_data_original, 'y': y_data_original, 'label': labels})
+        centers1 = temp_df1.groupby('label')[['x', 'y']].mean().values
+        
+        ax1.scatter(centers1[:, 0], centers1[:, 1], 
                    c='red', marker='X', s=200, 
                    edgecolors='black', linewidths=2, 
-                   label='Cluster Center')
+                   label='중심점 (Centroid)')
         
-        plt.xlabel(x_axis + axis_suffix, fontsize=12, fontweight='bold')
-        plt.ylabel(y_axis + axis_suffix, fontsize=12, fontweight='bold')
-        plt.title(f'K-means Result (K={k})', fontsize=14)
-        plt.colorbar(scatter, label='Cluster')
-        plt.grid(True, alpha=0.3)
-        plt.legend()
+        ax1.set_xlabel(x_axis + ' (Original)', fontsize=12, fontweight='bold')
+        ax1.set_ylabel(y_axis + ' (Original)', fontsize=12, fontweight='bold')
+        ax1.set_title(f'K-means Result - Original Data (K={k})', fontsize=14, fontweight='bold')
+        ax1.grid(True, alpha=0.3)
+        ax1.legend(loc='best', fontsize=9, framealpha=0.9)
+        
+        # 7. 그래프 2: PCA 2D 산점도
+        for cluster_id in range(k):
+            mask = labels == cluster_id
+            ax2.scatter(X_pca[mask, 0], X_pca[mask, 1], 
+                       c=[colors[cluster_id]], alpha=0.7, edgecolors='w', s=60,
+                       label=f'Cluster {cluster_id}')
+        
+        # PCA 공간의 군집별 중심점
+        temp_df2 = pd.DataFrame({'pc1': X_pca[:, 0], 'pc2': X_pca[:, 1], 'label': labels})
+        centers2 = temp_df2.groupby('label')[['pc1', 'pc2']].mean().values
+        
+        ax2.scatter(centers2[:, 0], centers2[:, 1], 
+                   c='red', marker='X', s=200, 
+                   edgecolors='black', linewidths=2, 
+                   label='중심점 (Centroid)')
+        
+        ax2.set_xlabel(f'PC1 ({pca.explained_variance_ratio_[0]:.1%} variance)', 
+                      fontsize=12, fontweight='bold')
+        ax2.set_ylabel(f'PC2 ({pca.explained_variance_ratio_[1]:.1%} variance)', 
+                      fontsize=12, fontweight='bold')
+        ax2.set_title(f'K-means Result - PCA 2D (K={k})', fontsize=14, fontweight='bold')
+        ax2.grid(True, alpha=0.3)
+        ax2.legend(loc='best', fontsize=9, framealpha=0.9)
+        
+        plt.tight_layout()
 
-        # 6. 결과 반환
+        # 8. 결과 반환
         img = io.BytesIO()
-        plt.savefig(img, format='png', bbox_inches='tight')
+        plt.savefig(img, format='png', bbox_inches='tight', dpi=100)
         img.seek(0)
         plot_url = base64.b64encode(img.getvalue()).decode()
         plt.close()
@@ -143,7 +148,9 @@ def analyze():
             'success': True,
             'plot_url': plot_url,
             'cluster_counts': cluster_counts,
-            'inertia': float(kmeans.inertia_)
+            'inertia': float(kmeans.inertia_),
+            'pca_variance': [float(pca.explained_variance_ratio_[0]), 
+                           float(pca.explained_variance_ratio_[1])]
         })
 
     except Exception as e:

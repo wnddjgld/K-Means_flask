@@ -3,15 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>데이터 분석 플랫폼</title>
+    <title>K-means 분석 플랫폼</title>
     <style>
         :root { --primary: #2563eb; --bg: #f3f4f6; }
         body { font-family: 'Malgun Gothic', 'NanumGothic', sans-serif; background: var(--bg); margin: 0; padding: 20px; }
-        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #1f2937; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #1f2937; margin-bottom: 10px; }
+        .subtitle { text-align: center; color: #6b7280; font-size: 14px; margin-bottom: 30px; }
         
         /* 섹션 스타일 */
-        .section { margin-bottom: 30px; padding: 20px; border: 1px solid #e5e7eb; border-radius: 10px; }
+        .section { margin-bottom: 30px; padding: 20px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fafafa; }
         .section-title { font-weight: bold; margin-bottom: 15px; color: var(--primary); font-size: 1.2em; }
         
         /* 컨트롤 그리드 */
@@ -33,24 +34,26 @@
         .btn:disabled { background: #9ca3af; cursor: not-allowed; }
 
         /* 미리보기 테이블 */
-        .table-container { overflow-x: auto; margin-top: 10px; }
+        .table-container { overflow-x: auto; margin-top: 10px; max-height: 300px; }
         table { width: 100%; border-collapse: collapse; font-size: 14px; }
         th, td { padding: 8px; border: 1px solid #e5e7eb; text-align: left; }
-        th { background: #f9fafb; font-weight: 600; white-space: nowrap; }
+        th { background: #f9fafb; font-weight: 600; white-space: nowrap; position: sticky; top: 0; }
         
         /* 결과 영역 */
         #resultArea { display: none; margin-top: 30px; border-top: 2px dashed #e5e7eb; padding-top: 30px; }
-        .chart-img { width: 100%; max-width: 800px; margin: 0 auto; display: block; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .chart-img { width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         .stats-box { display: flex; gap: 20px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
         .stat-card { background: #f0f9ff; padding: 15px; border-radius: 8px; text-align: center; min-width: 120px; }
+        .info-box { background: #e0f2fe; border-left: 4px solid #0284c7; padding: 12px; margin-top: 15px; border-radius: 4px; font-size: 14px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>데이터 K-means 분석기</h1>
+        <h1>📊 데이터 K-means 분석기</h1>
+        <p class="subtitle">데이터 업로드 → K값 설정 → 자동 정규화 → K-means 수행 → 2가지 그래프 출력</p>
 
         <div class="section">
-            <div class="section-title">1. 데이터 업로드</div>
+            <div class="section-title">1️⃣ 데이터 업로드</div>
             <input type="file" id="fileInput" accept=".csv">
             
             <div id="previewArea" style="display: none;">
@@ -62,36 +65,70 @@
         </div>
 
         <div class="section">
-            <div class="section-title">2. 분석 옵션 설정</div>
+            <div class="section-title">2️⃣ 분석 옵션 설정</div>
             <div class="controls">
                 <div>
-                    <label>X축 (시각화용)</label>
+                    <label>X축 컬럼 (그래프1 시각화용)</label>
                     <select id="xAxis"></select>
                 </div>
                 <div>
-                    <label>Y축 (시각화용)</label>
+                    <label>Y축 컬럼 (그래프1 시각화용)</label>
                     <select id="yAxis"></select>
                 </div>
                 <div>
                     <label>군집 수 (K)</label>
                     <input type="number" id="kValue" value="3" min="2" max="10">
                 </div>
-                <div>
-                    <label>전처리 옵션</label>
-                    <div style="margin-top: 8px;">
-                        <input type="checkbox" id="normalize" checked> <label for="normalize" style="display:inline;">정규화</label><br>
-                        <input type="checkbox" id="usePca"> <label for="usePca" style="display:inline;">PCA</label>
-                    </div>
-                </div>
             </div>
-            <button class="btn" id="analyzeBtn" onclick="analyzeData()" disabled>분석 시작</button>
+            
+            <div class="info-box">
+                ℹ️ <strong>자동 적용 항목:</strong> 
+                <ul style="margin: 8px 0; padding-left: 20px;">
+                    <li><strong>정규화</strong>: 모든 수치형 데이터를 표준화 (평균=0, 표준편차=1)</li>
+                    <li><strong>그래프1</strong>: 원본 X,Y축으로 군집 결과 표시</li>
+                    <li><strong>그래프2</strong>: PCA 2차원으로 변환하여 전체 데이터 패턴 표시</li>
+                </ul>
+            </div>
+            
+            <button class="btn" id="analyzeBtn" onclick="analyzeData()" disabled>🚀 분석 시작</button>
         </div>
 
         <div id="resultArea">
-            <h2 style="text-align: center;">분석 결과</h2>
+            <h2 style="text-align: center;">📈 분석 결과</h2>
             <img id="resultImage" class="chart-img" alt="Result Chart">
             
-            <div class="stats-box" id="statsBox"></div>
+            <div style="margin-top: 30px;">
+                <h3 style="color: #1f2937; margin-bottom: 15px;">📊 군집 분석 요약</h3>
+                
+                <!-- 군집별 데이터 개수 -->
+                <div class="stats-box" id="statsBox"></div>
+                
+                <!-- 전체 요약 정보 -->
+                <div id="summaryInfo" style="margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;"></div>
+            </div>
+            
+            <div class="info-box" style="margin-top: 30px;">
+                <strong>📖 결과 해석 가이드</strong><br><br>
+                
+                <strong>🔵 군집(Cluster)이란?</strong><br>
+                데이터를 유사한 특성끼리 묶은 그룹입니다. 같은 색상 = 같은 군집<br><br>
+                
+                <strong>📊 그래프 설명</strong><br>
+                • <strong>왼쪽 그래프:</strong> 선택한 X, Y축으로 원본 데이터를 표시 (실제 값으로 이해하기 쉬움)<br>
+                • <strong>오른쪽 그래프:</strong> PCA로 전체 데이터 패턴을 2차원으로 압축 (전체 구조 파악)<br>
+                • <strong>빨간 X 표시:</strong> 각 군집의 중심점 (해당 군집의 평균적인 위치)<br><br>
+                
+                <strong>📈 통계 수치 설명</strong><br>
+                • <strong>군집별 데이터 수:</strong> 각 그룹에 속한 데이터 개수<br>
+                • <strong>전체 데이터 수:</strong> 분석에 사용된 총 데이터 개수<br>
+                • <strong>Inertia:</strong> 군집 내 응집도 (낮을수록 그룹이 잘 뭉쳐있음)<br>
+                • <strong>가장 큰/작은 군집:</strong> 데이터 분포의 불균형 정도 확인<br><br>
+                
+                <strong>💡 활용 팁</strong><br>
+                • K값을 바꿔가며 분석하여 최적의 군집 수를 찾아보세요<br>
+                • 다른 X, Y축 조합으로 다양한 각도에서 데이터를 관찰하세요<br>
+                • 군집별 특성을 파악하여 실무에 적용하세요 (예: 고객 세분화, 이상치 탐지)
+            </div>
         </div>
     </div>
 
@@ -116,10 +153,10 @@
                     updateSelects(data.columns);
                     document.getElementById('analyzeBtn').disabled = false;
                 } else {
-                    alert('파일 읽기 실패: ' + data.error);
+                    alert('❌ 파일 읽기 실패: ' + data.error);
                 }
             } catch (err) {
-                alert('서버 오류 발생');
+                alert('❌ 서버 오류 발생');
             }
         });
 
@@ -166,15 +203,13 @@
 
             const btn = document.getElementById('analyzeBtn');
             btn.disabled = true;
-            btn.textContent = '분석 중...';
+            btn.textContent = '⏳ 분석 중... (정규화 + K-means + PCA)';
 
             const formData = new FormData();
             formData.append('file', uploadedFile);
             formData.append('k', document.getElementById('kValue').value);
             formData.append('x_axis', document.getElementById('xAxis').value);
             formData.append('y_axis', document.getElementById('yAxis').value);
-            formData.append('use_pca', document.getElementById('usePca').checked);
-            formData.append('normalize', document.getElementById('normalize').checked);
 
             try {
                 const res = await fetch('/analyze', { method: 'POST', body: formData });
@@ -184,25 +219,65 @@
                     document.getElementById('resultArea').style.display = 'block';
                     document.getElementById('resultImage').src = 'data:image/png;base64,' + data.plot_url;
                     
-                    // 통계 표시
+                    // 통계 계산
+                    const clusterEntries = Object.entries(data.cluster_counts);
+                    const totalData = clusterEntries.reduce((sum, [_, count]) => sum + count, 0);
+                    const maxCluster = clusterEntries.reduce((max, curr) => curr[1] > max[1] ? curr : max);
+                    const minCluster = clusterEntries.reduce((min, curr) => curr[1] < min[1] ? curr : min);
+                    
+                    // 군집별 데이터 수 표시
                     const statsBox = document.getElementById('statsBox');
-                    statsBox.innerHTML = Object.entries(data.cluster_counts).map(([cluster, count]) => `
-                        <div class="stat-card">
-                            <div style="font-size: 24px; font-weight: bold; color: #2563eb;">${count}</div>
-                            <div style="font-size: 14px; color: #666;">Cluster ${cluster}</div>
+                    let statsHtml = clusterEntries.map(([cluster, count]) => {
+                        const percentage = ((count / totalData) * 100).toFixed(1);
+                        return `
+                            <div class="stat-card">
+                                <div style="font-size: 28px; font-weight: bold; color: #2563eb;">${count}개</div>
+                                <div style="font-size: 14px; color: #666; margin-top: 5px;">Cluster ${cluster}</div>
+                                <div style="font-size: 12px; color: #999; margin-top: 3px;">${percentage}%</div>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    statsBox.innerHTML = statsHtml;
+                    
+                    // 전체 요약 정보
+                    const summaryInfo = document.getElementById('summaryInfo');
+                    summaryInfo.innerHTML = `
+                        <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; border-left: 4px solid #22c55e;">
+                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">📦 전체 데이터 수</div>
+                            <div style="font-size: 24px; font-weight: bold; color: #16a34a;">${totalData}개</div>
                         </div>
-                    `).join('');
+                        
+                        <div style="background: #fef3c7; padding: 15px; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">📊 Inertia (응집도)</div>
+                            <div style="font-size: 24px; font-weight: bold; color: #d97706;">${data.inertia.toFixed(2)}</div>
+                            <div style="font-size: 11px; color: #92400e; margin-top: 3px;">낮을수록 군집이 잘 형성됨</div>
+                        </div>
+                        
+                        <div style="background: #e0e7ff; padding: 15px; border-radius: 8px; border-left: 4px solid #6366f1;">
+                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">⬆️ 가장 큰 군집</div>
+                            <div style="font-size: 24px; font-weight: bold; color: #4f46e5;">Cluster ${maxCluster[0]}</div>
+                            <div style="font-size: 11px; color: #4338ca; margin-top: 3px;">${maxCluster[1]}개 (${((maxCluster[1]/totalData)*100).toFixed(1)}%)</div>
+                        </div>
+                        
+                        <div style="background: #fce7f3; padding: 15px; border-radius: 8px; border-left: 4px solid #ec4899;">
+                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">⬇️ 가장 작은 군집</div>
+                            <div style="font-size: 24px; font-weight: bold; color: #db2777;">Cluster ${minCluster[0]}</div>
+                            <div style="font-size: 11px; color: #9f1239; margin-top: 3px;">${minCluster[1]}개 (${((minCluster[1]/totalData)*100).toFixed(1)}%)</div>
+                        </div>
+                    `;
                     
                     // 스크롤 이동
                     document.getElementById('resultArea').scrollIntoView({ behavior: 'smooth' });
                 } else {
-                    alert('분석 실패: ' + data.error);
+                    alert('❌ 분석 실패: ' + data.error);
                 }
             } catch (err) {
-                alert('분석 중 오류 발생');
+                alert('❌ 분석 중 오류 발생');
+                console.error(err);
             } finally {
                 btn.disabled = false;
-                btn.textContent = '분석 시작';
+                btn.textContent = '🚀 분석 시작';
             }
         }
     </script>

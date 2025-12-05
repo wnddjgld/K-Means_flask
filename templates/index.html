@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>데이터 분석 플랫폼</title>
+    <style>
+        :root { --primary: #2563eb; --bg: #f3f4f6; }
+        body { font-family: 'Malgun Gothic', 'NanumGothic', sans-serif; background: var(--bg); margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #1f2937; }
+        
+        /* 섹션 스타일 */
+        .section { margin-bottom: 30px; padding: 20px; border: 1px solid #e5e7eb; border-radius: 10px; }
+        .section-title { font-weight: bold; margin-bottom: 15px; color: var(--primary); font-size: 1.2em; }
+        
+        /* 컨트롤 그리드 */
+        .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        
+        /* 입력 요소 스타일 */
+        label { display: block; margin-bottom: 5px; font-weight: 500; }
+        select, input[type="number"], input[type="file"] {
+            width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;
+        }
+        
+        /* 버튼 */
+        .btn {
+            background: var(--primary); color: white; border: none; padding: 12px 24px;
+            border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; margin-top: 20px;
+            transition: background 0.2s;
+        }
+        .btn:hover { background: #1d4ed8; }
+        .btn:disabled { background: #9ca3af; cursor: not-allowed; }
+
+        /* 미리보기 테이블 */
+        .table-container { overflow-x: auto; margin-top: 10px; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { padding: 8px; border: 1px solid #e5e7eb; text-align: left; }
+        th { background: #f9fafb; font-weight: 600; white-space: nowrap; }
+        
+        /* 결과 영역 */
+        #resultArea { display: none; margin-top: 30px; border-top: 2px dashed #e5e7eb; padding-top: 30px; }
+        .chart-img { width: 100%; max-width: 800px; margin: 0 auto; display: block; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .stats-box { display: flex; gap: 20px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
+        .stat-card { background: #f0f9ff; padding: 15px; border-radius: 8px; text-align: center; min-width: 120px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>데이터 K-means 분석기</h1>
+
+        <div class="section">
+            <div class="section-title">1. 데이터 업로드</div>
+            <input type="file" id="fileInput" accept=".csv">
+            
+            <div id="previewArea" style="display: none;">
+                <p style="margin-top: 15px;">📋 <strong>데이터 미리보기 (상위 5행)</strong> - 총 <span id="totalRows">0</span>행</p>
+                <div class="table-container">
+                    <table id="previewTable"></table>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">2. 분석 옵션 설정</div>
+            <div class="controls">
+                <div>
+                    <label>X축 (시각화용)</label>
+                    <select id="xAxis"></select>
+                </div>
+                <div>
+                    <label>Y축 (시각화용)</label>
+                    <select id="yAxis"></select>
+                </div>
+                <div>
+                    <label>군집 수 (K)</label>
+                    <input type="number" id="kValue" value="3" min="2" max="10">
+                </div>
+                <div>
+                    <label>전처리 옵션</label>
+                    <div style="margin-top: 8px;">
+                        <input type="checkbox" id="normalize" checked> <label for="normalize" style="display:inline;">정규화</label><br>
+                        <input type="checkbox" id="usePca"> <label for="usePca" style="display:inline;">PCA</label>
+                    </div>
+                </div>
+            </div>
+            <button class="btn" id="analyzeBtn" onclick="analyzeData()" disabled>분석 시작</button>
+        </div>
+
+        <div id="resultArea">
+            <h2 style="text-align: center;">분석 결과</h2>
+            <img id="resultImage" class="chart-img" alt="Result Chart">
+            
+            <div class="stats-box" id="statsBox"></div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        let uploadedFile = null;
+
+        // 파일 선택 시 미리보기 요청
+        fileInput.addEventListener('change', async function(e) {
+            if (!e.target.files[0]) return;
+            uploadedFile = e.target.files[0];
+            
+            const formData = new FormData();
+            formData.append('file', uploadedFile);
+
+            try {
+                const res = await fetch('/preview', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (data.success) {
+                    renderPreview(data);
+                    updateSelects(data.columns);
+                    document.getElementById('analyzeBtn').disabled = false;
+                } else {
+                    alert('파일 읽기 실패: ' + data.error);
+                }
+            } catch (err) {
+                alert('서버 오류 발생');
+            }
+        });
+
+        // 미리보기 테이블 렌더링
+        function renderPreview(data) {
+            document.getElementById('previewArea').style.display = 'block';
+            document.getElementById('totalRows').textContent = data.total_rows;
+            
+            const table = document.getElementById('previewTable');
+            const records = data.preview_data;
+            if (records.length === 0) return;
+
+            // 헤더 생성
+            const headers = Object.keys(records[0]);
+            let html = '<thead><tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr></thead>';
+            
+            // 바디 생성
+            html += '<tbody>' + records.map(row => {
+                return '<tr>' + headers.map(h => `<td>${row[h]}</td>`).join('') + '</tr>';
+            }).join('') + '</tbody>';
+
+            table.innerHTML = html;
+        }
+
+        // 선택 상자(X축, Y축) 업데이트
+        function updateSelects(columns) {
+            const xSelect = document.getElementById('xAxis');
+            const ySelect = document.getElementById('yAxis');
+            
+            const options = columns.map(col => `<option value="${col}">${col}</option>`).join('');
+            
+            xSelect.innerHTML = options;
+            ySelect.innerHTML = options;
+
+            // 기본값 자동 선택 (서로 다른 값으로)
+            if (columns.length > 1) {
+                ySelect.selectedIndex = 1;
+            }
+        }
+
+        // 분석 수행
+        async function analyzeData() {
+            if (!uploadedFile) return;
+
+            const btn = document.getElementById('analyzeBtn');
+            btn.disabled = true;
+            btn.textContent = '분석 중...';
+
+            const formData = new FormData();
+            formData.append('file', uploadedFile);
+            formData.append('k', document.getElementById('kValue').value);
+            formData.append('x_axis', document.getElementById('xAxis').value);
+            formData.append('y_axis', document.getElementById('yAxis').value);
+            formData.append('use_pca', document.getElementById('usePca').checked);
+            formData.append('normalize', document.getElementById('normalize').checked);
+
+            try {
+                const res = await fetch('/analyze', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (data.success) {
+                    document.getElementById('resultArea').style.display = 'block';
+                    document.getElementById('resultImage').src = 'data:image/png;base64,' + data.plot_url;
+                    
+                    // 통계 표시
+                    const statsBox = document.getElementById('statsBox');
+                    statsBox.innerHTML = Object.entries(data.cluster_counts).map(([cluster, count]) => `
+                        <div class="stat-card">
+                            <div style="font-size: 24px; font-weight: bold; color: #2563eb;">${count}</div>
+                            <div style="font-size: 14px; color: #666;">Cluster ${cluster}</div>
+                        </div>
+                    `).join('');
+                    
+                    // 스크롤 이동
+                    document.getElementById('resultArea').scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    alert('분석 실패: ' + data.error);
+                }
+            } catch (err) {
+                alert('분석 중 오류 발생');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '분석 시작';
+            }
+        }
+    </script>
+</body>
+</html>
